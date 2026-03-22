@@ -314,7 +314,8 @@ data class ChatUiMessage(
     val isThinking: Boolean = false,
     val thinkingText: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
-    val error: String? = null
+    val error: String? = null,
+    val metadata: Map<String, String> = emptyMap()
 )
 
 /**

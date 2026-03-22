@@ -166,7 +166,7 @@ class ToolRegistry {
 /**
  * ToolExecutor - 工具执行器
  *
- * 对应 NanoBot 的各个 tools/*.py 实现
+ * 对应 NanoBot 的各个 tools/xxx.py 实现
  */
 class ToolExecutor(
     private val memoryStore: com.nanobot.android.agent.MemoryStore,

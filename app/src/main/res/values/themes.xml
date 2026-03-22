@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.NanoBot" parent="Theme.Material3.DayNight.NoActionBar" />
+    <!-- 使用 AppCompat 主题作为启动壳，实际 UI 全部由 Jetpack Compose 接管 -->
+    <style name="Theme.NanoBot" parent="Theme.AppCompat.DayNight.NoActionBar" />
 </resources>

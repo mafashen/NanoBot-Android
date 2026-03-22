@@ -59,6 +59,14 @@ android {
     }
 }
 
+configurations.all {
+    resolutionStrategy {
+        // 强制统一 jetbrains annotations 版本，解决 annotations vs annotations-java5 重复类冲突
+        force("org.jetbrains:annotations:23.0.0")
+    }
+    exclude(group = "org.jetbrains", module = "annotations-java5")
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
