@@ -67,6 +67,9 @@ fun SettingsScreen(
     var customDefaultModel by remember(savedSettings.customDefaultModel) {
         mutableStateOf(savedSettings.customDefaultModel)
     }
+    var assistantStyle by remember(savedSettings.assistantStyle) {
+        mutableStateOf(savedSettings.assistantStyle)
+    }
 
     var saveSuccess by remember { mutableStateOf(false) }
 
@@ -82,7 +85,8 @@ fun SettingsScreen(
                 customApiKey = customApiKey,
                 customBaseUrl = customBaseUrl,
                 customProviderName = customProviderName,
-                customDefaultModel = customDefaultModel
+                customDefaultModel = customDefaultModel,
+                assistantStyle = assistantStyle
             )
         )
         saveSuccess = true
@@ -153,6 +157,14 @@ fun SettingsScreen(
             }
 
             // ── 安全说明 ──────────────────────────────────────────────────────
+            item {
+                AssistantStyleCard(
+                    currentStyle = assistantStyle,
+                    onStyleChange = { assistantStyle = it }
+                )
+            }
+
+            // ── 安全提示 ──────────────────────────────────────────────────────
             item {
                 Card(
                     colors = CardDefaults.cardColors(
@@ -488,8 +500,132 @@ fun ProviderSection(
 }
 
 /**
- * API Key 输入框：默认掩码，点击眼睛图标切换明文显示
+ * 助手风格选择卡片
+ *
+ * 提供两种风格：活泼俏皮 / 严谨专业
+ * 选择后保存到 EncryptedSharedPreferences，下一次对话立即生效（热重载）
  */
+@Composable
+fun AssistantStyleCard(
+    currentStyle: String,
+    onStyleChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Face,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    "助手风格",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Text(
+                "选择不同风格将调整 NanoBot 的说话方式和系统提示词，下次对话立即生效。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StyleOptionCard(
+                    emoji = "🎉",
+                    title = "活泼俏皮",
+                    description = "轻松有趣，喜欢用 emoji，像朋友一样聊天",
+                    selected = currentStyle == "lively",
+                    onClick = { onStyleChange("lively") },
+                    modifier = Modifier.weight(1f)
+                )
+                StyleOptionCard(
+                    emoji = "📋",
+                    title = "严谨专业",
+                    description = "简洁精准，结构清晰，适合工作和技术场景",
+                    selected = currentStyle == "professional",
+                    onClick = { onStyleChange("professional") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StyleOptionCard(
+    emoji: String,
+    title: String,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val borderColor = if (selected)
+        MaterialTheme.colorScheme.primary
+    else
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+
+    OutlinedCard(
+        onClick = onClick,
+        modifier = modifier,
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (selected) 2.dp else 1.dp,
+            color = borderColor
+        ),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = if (selected)
+                MaterialTheme.colorScheme.primaryContainer
+            else
+                MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(emoji, style = MaterialTheme.typography.headlineMedium)
+            Text(
+                title,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (selected)
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                else
+                    MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (selected)
+                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                else
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+            if (selected) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = "已选择",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun ApiKeyField(
     value: String,

@@ -1,6 +1,7 @@
 package com.nanobot.android.agent
 
 import android.util.Log
+import com.nanobot.android.bus.AgentLogLevel
 import com.nanobot.android.bus.AgentState
 import com.nanobot.android.bus.AgentStatus
 import com.nanobot.android.bus.MessageBus
@@ -51,11 +52,25 @@ class AgentLoop(
     @Volatile
     private var isProcessing = false
 
+    // ==================== 日志工具 ====================
+
+    private fun log(level: AgentLogLevel, msg: String) {
+        when (level) {
+            AgentLogLevel.DEBUG -> Log.d(TAG, msg)
+            AgentLogLevel.INFO -> Log.i(TAG, msg)
+            AgentLogLevel.WARN -> Log.w(TAG, msg)
+            AgentLogLevel.ERROR -> Log.e(TAG, msg)
+            AgentLogLevel.VERBOSE -> Log.v(TAG, msg)
+        }
+        MessageBus.emitLog(level, TAG, msg)
+    }
+
     /**
      * 启动 Agent Loop（在后台协程中运行）
      */
     fun start() {
         Log.i(TAG, "AgentLoop starting...")
+        log(AgentLogLevel.INFO, "AgentLoop 已启动")
         job = scope.launch {
             run()
         }
@@ -117,6 +132,7 @@ class AgentLoop(
             Log.w(TAG, "Already processing a message, queuing: ${inbound.text.take(50)}")
         }
         isProcessing = true
+        log(AgentLogLevel.INFO, "收到消息: \"${inbound.text.take(60)}${if (inbound.text.length > 60) "…" else ""}\"")
 
         try {
             // 处理系统命令
@@ -130,6 +146,7 @@ class AgentLoop(
 
             // 确定会话键
             val sessionKey = inbound.sessionKeyOverride ?: currentSessionKey
+            log(AgentLogLevel.DEBUG, "使用会话: $sessionKey")
 
             // 加载或创建会话
             val session = sessionManager.getOrCreate(sessionKey)
@@ -197,6 +214,7 @@ class AgentLoop(
     ) {
         val (provider, model) = resolveProviderAndModel()
         val tools = toolRegistry.getAll()
+        log(AgentLogLevel.INFO, "开始 Agent Loop | 模型: $model | 工具数: ${tools.size}")
 
         var iterationCount = 0
         var done = false
@@ -204,6 +222,7 @@ class AgentLoop(
         while (!done && iterationCount < MAX_ITERATIONS) {
             iterationCount++
             Log.d(TAG, "Agent loop iteration $iterationCount/$MAX_ITERATIONS")
+            log(AgentLogLevel.DEBUG, "迭代 $iterationCount / $MAX_ITERATIONS")
 
             // 构建上下文
             MessageBus.updateStatus(AgentStatus(
@@ -224,6 +243,7 @@ class AgentLoop(
             ))
 
             val llmResponse = try {
+                log(AgentLogLevel.INFO, "调用 LLM: $model …")
                 provider.chatWithRetry(
                     messages = messages,
                     tools = tools,
@@ -233,6 +253,7 @@ class AgentLoop(
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "LLM call failed: ${e.message}", e)
+                log(AgentLogLevel.ERROR, "LLM 调用失败: ${e.message}")
                 sendError(chatId, "LLM 调用失败: ${e.message}")
                 return
             }
@@ -241,6 +262,9 @@ class AgentLoop(
                     "has_tools=${llmResponse.hasToolCalls}, " +
                     "content_len=${llmResponse.content?.length ?: 0}, " +
                     "usage=${llmResponse.usage}")
+            log(AgentLogLevel.INFO, "LLM 响应: finish=${llmResponse.finishReason}, " +
+                    "has_tools=${llmResponse.hasToolCalls}, " +
+                    "tokens=${llmResponse.usage?.totalTokens ?: "?"}")
 
             // 将助手响应加入会话
             val assistantMessage = buildAssistantMessage(llmResponse)
@@ -261,6 +285,8 @@ class AgentLoop(
 
             // 处理工具调用
             if (llmResponse.hasToolCalls) {
+                val toolNames = llmResponse.toolCalls.joinToString(", ") { it.name }
+                log(AgentLogLevel.INFO, "工具调用: $toolNames")
                 MessageBus.updateStatus(AgentStatus(
                     state = AgentState.TOOL_CALLING,
                     sessionKey = sessionKey,
@@ -333,11 +359,13 @@ class AgentLoop(
         chatId: String
     ): List<ToolResult> {
         return toolCalls.map { call ->
-            Log.d(TAG, "Executing tool: ${call.name} with args: ${call.arguments.take(200)}")
-            try {
+                Log.d(TAG, "Executing tool: ${call.name} with args: ${call.arguments.take(200)}")
+                log(AgentLogLevel.DEBUG, "执行工具 [${call.name}] args=${call.arguments.take(100)}")
+                try {
                 val argsMap = parseArguments(call.arguments)
                 val resultText = toolExecutor.execute(call.name, argsMap)
                 Log.d(TAG, "Tool ${call.name} completed, result length: ${resultText.length}")
+                log(AgentLogLevel.DEBUG, "工具 [${call.name}] 完成, 结果长度=${resultText.length}")
                 ToolResult(
                     toolCallId = call.id,
                     toolName = call.name,
@@ -346,6 +374,7 @@ class AgentLoop(
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Tool ${call.name} failed: ${e.message}", e)
+                log(AgentLogLevel.ERROR, "工具 [${call.name}] 失败: ${e.message}")
                 ToolResult(
                     toolCallId = call.id,
                     toolName = call.name,

@@ -32,6 +32,13 @@ import kotlinx.coroutines.launch
 
 /**
  * 聊天主界面
+ *
+ * 包含：
+ * - 左侧会话管理抽屉（ModalNavigationDrawer）
+ * - 顶部 TopBar（汉堡菜单、标题、日志按钮、设置按钮）
+ * - 消息列表
+ * - 底部日志面板（可收起）
+ * - 输入栏
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,7 +50,11 @@ fun ChatScreen(
     val inputText by viewModel.inputText.collectAsState()
     val agentStatus by viewModel.agentStatus.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val sessionList by viewModel.sessionList.collectAsState()
+    val currentSessionKey by viewModel.currentSessionKey.collectAsState()
+    val showLogPanel by viewModel.showLogPanel.collectAsState()
 
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
@@ -54,74 +65,117 @@ fun ChatScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("NanoBot") },
-                actions = {
-                    // Agent 状态指示器
-                    AgentStatusIndicator(
-                        state = agentStatus.state,
-                        currentAction = agentStatus.currentAction
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    // 新建会话按钮
-                    IconButton(onClick = { viewModel.newSession() }) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "新建会话"
-                        )
-                    }
-                    // 设置按钮
-                    onOpenSettings?.let {
-                        IconButton(onClick = it) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "设置"
-                            )
-                        }
-                    }
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            SessionDrawerContent(
+                sessions = sessionList,
+                currentSessionKey = currentSessionKey,
+                onSessionSelect = { key ->
+                    viewModel.switchSession(key)
+                    scope.launch { drawerState.close() }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        },
-        bottomBar = {
-            ChatInputBar(
-                text = inputText,
-                onTextChange = viewModel::updateInputText,
-                onSend = { viewModel.sendMessage(inputText) },
-                isLoading = isLoading
+                onSessionDelete = { key ->
+                    viewModel.deleteSession(key)
+                },
+                onNewSession = {
+                    viewModel.newSession()
+                    scope.launch { drawerState.close() }
+                }
             )
         }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            if (messages.isEmpty()) {
-                // 空状态提示
-                EmptyStateView(modifier = Modifier.align(Alignment.Center))
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    items(
-                        items = messages,
-                        key = { it.id }
-                    ) { message ->
-                        MessageBubble(message = message)
-                    }
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    navigationIcon = {
+                        // 汉堡菜单 -> 打开会话抽屉
+                        IconButton(onClick = {
+                            scope.launch { drawerState.open() }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = "会话列表"
+                            )
+                        }
+                    },
+                    title = { Text("NanoBot") },
+                    actions = {
+                        // Agent 状态指示器
+                        AgentStatusIndicator(
+                            state = agentStatus.state,
+                            currentAction = agentStatus.currentAction
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        // 日志按钮
+                        IconButton(onClick = { viewModel.toggleLogPanel() }) {
+                            Icon(
+                                imageVector = Icons.Default.Terminal,
+                                contentDescription = "运行日志",
+                                tint = if (showLogPanel)
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    LocalContentColor.current
+                            )
+                        }
+                        // 设置按钮
+                        onOpenSettings?.let {
+                            IconButton(onClick = it) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "设置"
+                                )
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            },
+            bottomBar = {
+                Column {
+                    // 日志面板（在输入栏上方）
+                    AgentLogPanel(
+                        visible = showLogPanel,
+                        onClose = { viewModel.hideLogPanel() }
+                    )
+                    ChatInputBar(
+                        text = inputText,
+                        onTextChange = viewModel::updateInputText,
+                        onSend = { viewModel.sendMessage(inputText) },
+                        isLoading = isLoading
+                    )
+                }
+            }
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                if (messages.isEmpty()) {
+                    // 空状态提示
+                    EmptyStateView(modifier = Modifier.align(Alignment.Center))
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(
+                            items = messages,
+                            key = { it.id }
+                        ) { message ->
+                            MessageBubble(message = message)
+                        }
 
-                    // 加载指示器
-                    if (isLoading && (messages.isEmpty() || messages.last().role != MessageRole.ASSISTANT)) {
-                        item {
-                            ThinkingIndicator()
+                        // 加载指示器
+                        if (isLoading && (messages.isEmpty() || messages.last().role != MessageRole.ASSISTANT)) {
+                            item {
+                                ThinkingIndicator()
+                            }
                         }
                     }
                 }

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asSharedFlow
  * 使用 Kotlin Channel 替代 Python asyncio.Queue
  * - inboundChannel: UI -> Agent
  * - outboundFlow: Agent -> UI (使用 SharedFlow 支持多订阅者)
+ * - agentLogFlow: Agent 运行日志流（UI 日志面板订阅）
  */
 object MessageBus {
 
@@ -34,6 +35,13 @@ object MessageBus {
     )
     val agentStatusFlow: SharedFlow<AgentStatus> = _agentStatusFlow.asSharedFlow()
 
+    // Agent 运行日志流（replay=200，UI 打开时可回放近 200 条日志）
+    private val _agentLogFlow = MutableSharedFlow<AgentLogEntry>(
+        replay = 200,
+        extraBufferCapacity = 256
+    )
+    val agentLogFlow: SharedFlow<AgentLogEntry> = _agentLogFlow.asSharedFlow()
+
     /**
      * 发布入站消息（从 UI 发给 Agent）
      */
@@ -54,7 +62,33 @@ object MessageBus {
     suspend fun updateStatus(status: AgentStatus) {
         _agentStatusFlow.emit(status)
     }
+
+    /**
+     * 写入运行日志（AgentLoop 调用，UI 日志面板订阅）
+     */
+    fun emitLog(level: AgentLogLevel, tag: String, message: String) {
+        _agentLogFlow.tryEmit(
+            AgentLogEntry(
+                level = level,
+                tag = tag,
+                message = message,
+                timestamp = System.currentTimeMillis()
+            )
+        )
+    }
 }
+
+/**
+ * Agent 运行日志条目
+ */
+data class AgentLogEntry(
+    val level: AgentLogLevel,
+    val tag: String,
+    val message: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+enum class AgentLogLevel { VERBOSE, DEBUG, INFO, WARN, ERROR }
 
 /**
  * Agent 运行状态

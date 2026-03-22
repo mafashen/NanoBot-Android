@@ -91,7 +91,12 @@ class NanoBotApplication : Application() {
             consolidationThreshold = 50
         )
 
-        val contextBuilder = ContextBuilder(sessionManager, memoryStore, agentsConfig)
+        val contextBuilder = ContextBuilder(
+            sessionManager = sessionManager,
+            memoryStore = memoryStore,
+            config = agentsConfig,
+            settingsRepository = SettingsRepository.get(this)
+        )
 
         // 5. AgentLoop（持有 providerRegistry 的引用，热重载时通过 updateProviderRegistry 更新）
         agentLoop = AgentLoop(
@@ -124,7 +129,7 @@ class NanoBotApplication : Application() {
                         s.openrouterApiKey, s.anthropicApiKey, s.deepseekApiKey,
                         s.openaiApiKey, s.ollamaBaseUrl,
                         s.customApiKey, s.customBaseUrl, s.customProviderName,
-                        s.defaultModel
+                        s.defaultModel, s.assistantStyle
                     )
                 }
                 .distinctUntilChanged()

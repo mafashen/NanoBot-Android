@@ -40,7 +40,10 @@ data class AppSettings(
     val customApiKey: String = "",
     val customBaseUrl: String = "",
     val customProviderName: String = "",
-    val customDefaultModel: String = ""
+    val customDefaultModel: String = "",
+
+    // 助手风格：lively（活泼俏皮）/ professional（严谨专业）
+    val assistantStyle: String = "professional"
 )
 
 /**
@@ -99,7 +102,8 @@ class SettingsRepository private constructor(context: Context) {
             customApiKey = settings.customApiKey.trim(),
             customBaseUrl = settings.customBaseUrl.trim(),
             customProviderName = settings.customProviderName.trim(),
-            customDefaultModel = settings.customDefaultModel.trim()
+            customDefaultModel = settings.customDefaultModel.trim(),
+            assistantStyle = settings.assistantStyle.trim().ifEmpty { "professional" }
         )
 
         encryptedPrefs.edit()
@@ -113,6 +117,7 @@ class SettingsRepository private constructor(context: Context) {
             .putString(KEY_CUSTOM_BASE_URL, sanitized.customBaseUrl)
             .putString(KEY_CUSTOM_PROVIDER_NAME, sanitized.customProviderName)
             .putString(KEY_CUSTOM_DEFAULT_MODEL, sanitized.customDefaultModel)
+            .putString(KEY_ASSISTANT_STYLE, sanitized.assistantStyle)
             .apply()  // 异步提交（不阻塞 UI 线程）
 
         // 更新内存中的 StateFlow，触发热重载
@@ -144,7 +149,8 @@ class SettingsRepository private constructor(context: Context) {
             customApiKey = encryptedPrefs.getString(KEY_CUSTOM_API_KEY, "") ?: "",
             customBaseUrl = encryptedPrefs.getString(KEY_CUSTOM_BASE_URL, "") ?: "",
             customProviderName = encryptedPrefs.getString(KEY_CUSTOM_PROVIDER_NAME, "") ?: "",
-            customDefaultModel = encryptedPrefs.getString(KEY_CUSTOM_DEFAULT_MODEL, "") ?: ""
+            customDefaultModel = encryptedPrefs.getString(KEY_CUSTOM_DEFAULT_MODEL, "") ?: "",
+            assistantStyle = encryptedPrefs.getString(KEY_ASSISTANT_STYLE, "professional") ?: "professional"
         )
     }
 
@@ -176,6 +182,7 @@ class SettingsRepository private constructor(context: Context) {
         private const val KEY_CUSTOM_BASE_URL = "custom_base_url"
         private const val KEY_CUSTOM_PROVIDER_NAME = "custom_provider_name"
         private const val KEY_CUSTOM_DEFAULT_MODEL = "custom_default_model"
+        private const val KEY_ASSISTANT_STYLE = "assistant_style"
 
         @Volatile
         private var INSTANCE: SettingsRepository? = null

@@ -1,7 +1,9 @@
 package com.nanobot.android.ui
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.nanobot.android.NanoBotApplication
 import com.nanobot.android.bus.AgentState
 import com.nanobot.android.bus.AgentStatus
 import com.nanobot.android.bus.MessageBus
@@ -15,7 +17,9 @@ import java.util.UUID
  *
  * 管理 UI 状态，桥接 MessageBus 和 Compose UI
  */
-class ChatViewModel : ViewModel() {
+class ChatViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val app get() = getApplication<NanoBotApplication>()
 
     // ==================== UI 状态 ====================
 
@@ -34,6 +38,14 @@ class ChatViewModel : ViewModel() {
     private val _currentSessionKey = MutableStateFlow("default")
     val currentSessionKey: StateFlow<String> = _currentSessionKey.asStateFlow()
 
+    // 会话列表（侧边栏用）
+    private val _sessionList = MutableStateFlow<List<ConversationItem>>(emptyList())
+    val sessionList: StateFlow<List<ConversationItem>> = _sessionList.asStateFlow()
+
+    // 日志面板是否展开
+    private val _showLogPanel = MutableStateFlow(false)
+    val showLogPanel: StateFlow<Boolean> = _showLogPanel.asStateFlow()
+
     // 当前正在流式输出的消息 ID
     private var streamingMessageId: String? = null
 
@@ -42,6 +54,7 @@ class ChatViewModel : ViewModel() {
     init {
         observeOutboundMessages()
         observeAgentStatus()
+        refreshSessionList()
     }
 
     /**
@@ -64,6 +77,10 @@ class ChatViewModel : ViewModel() {
             MessageBus.agentStatusFlow.collect { status ->
                 _agentStatus.value = status
                 _isLoading.value = status.state != AgentState.IDLE && status.state != AgentState.ERROR
+                // 每次 Agent 回到 IDLE 时刷新会话列表
+                if (status.state == AgentState.IDLE) {
+                    refreshSessionList()
+                }
             }
         }
     }
@@ -229,11 +246,88 @@ class ChatViewModel : ViewModel() {
             isSystemCommand = true
         )
         MessageBus.publishInbound(inbound)
+        refreshSessionList()
+    }
+
+    /**
+     * 切换到已有会话
+     */
+    fun switchSession(sessionKey: String) {
+        clearChat()
+        _currentSessionKey.value = sessionKey
+
+        // 加载该会话的 UI 消息（从 SessionManager 读取历史）
+        viewModelScope.launch {
+            try {
+                val messages = app.sessionManager.getMessages(sessionKey)
+                val uiMessages = messages.mapNotNull { msg ->
+                    when (msg.role) {
+                        "user" -> ChatUiMessage(
+                            id = UUID.randomUUID().toString(),
+                            role = MessageRole.USER,
+                            text = msg.content ?: ""
+                        )
+                        "assistant" -> if ((msg.content ?: "").isNotBlank()) ChatUiMessage(
+                            id = UUID.randomUUID().toString(),
+                            role = MessageRole.ASSISTANT,
+                            text = msg.content ?: ""
+                        ) else null
+                        else -> null
+                    }
+                }
+                _messages.value = uiMessages
+            } catch (e: Exception) {
+                // 读取失败时保持空会话
+            }
+        }
+    }
+
+    /**
+     * 删除会话
+     */
+    fun deleteSession(sessionKey: String) {
+        app.sessionManager.deleteSession(sessionKey)
+        if (sessionKey == _currentSessionKey.value) {
+            newSession()
+        } else {
+            refreshSessionList()
+        }
+    }
+
+    /**
+     * 刷新会话列表
+     */
+    fun refreshSessionList() {
+        viewModelScope.launch {
+            try {
+                val keys = app.sessionManager.listSessions()
+                val items = keys.map { key ->
+                    val messages = app.sessionManager.getMessages(key)
+                    val lastUserMsg = messages.lastOrNull { it.role == "user" }?.content ?: ""
+                    val firstUserMsg = messages.firstOrNull { it.role == "user" }?.content ?: key
+                    ConversationItem(
+                        sessionKey = key,
+                        title = firstUserMsg.take(20).ifEmpty { "会话 ${key.take(4)}" },
+                        lastMessage = lastUserMsg.take(40).ifEmpty { "（空会话）" },
+                        messageCount = messages.size,
+                        updatedAt = messages.lastOrNull()?.timestamp ?: 0L
+                    )
+                }.sortedByDescending { it.updatedAt }
+                _sessionList.value = items
+            } catch (e: Exception) {
+                _sessionList.value = emptyList()
+            }
+        }
+    }
+
+    // ==================== 日志面板 ====================
+
+    fun toggleLogPanel() {
+        _showLogPanel.value = !_showLogPanel.value
+    }
+
+    fun hideLogPanel() {
+        _showLogPanel.value = false
     }
 }
 
-// 添加 metadata 支持（扩展 ChatUiMessage）
-private data class ChatUiMessageWithMeta(
-    val message: ChatUiMessage,
-    val metadata: Map<String, String> = emptyMap()
-)
