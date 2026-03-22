@@ -38,7 +38,7 @@ class AgentLoop(
     private val toolExecutor: ToolExecutor,
     private val contextBuilder: ContextBuilder,
     private val memoryStore: MemoryStore,
-    private val config: AgentsConfig = AgentsConfig()
+    private var config: AgentsConfig = AgentsConfig()
 ) {
 
     private var job: Job? = null
@@ -70,6 +70,20 @@ class AgentLoop(
         scope.cancel()
     }
 
+    /**
+     * 热重载：更新 Provider 注册表和默认模型
+     *
+     * 用户在设置界面保存新配置后，由 NanoBotApplication 调用此方法。
+     * 线程安全（@Volatile 保证可见性）。
+     */
+    @Volatile
+    private var _providerRegistry: ProviderRegistry = providerRegistry
+
+    fun updateProviderRegistry(newRegistry: ProviderRegistry, newDefaultModel: String) {
+        _providerRegistry = newRegistry
+        config = config.copy(defaultModel = newDefaultModel)
+        Log.i(TAG, "ProviderRegistry updated. defaultModel=$newDefaultModel")
+    }
     /**
      * 主循环 - 持续从消息总线消费入站消息
      *
@@ -407,7 +421,7 @@ ${messagesToProcess.joinToString("\n") { "[${it.role.uppercase()}] ${it.content?
     // ==================== 工具方法 ====================
 
     private fun resolveProviderAndModel(): Pair<LLMProvider, String> {
-        return providerRegistry.resolveProvider(config.defaultModel)
+        return _providerRegistry.resolveProvider(config.defaultModel)
     }
 
     private fun buildUserMessage(inbound: InboundMessage): ChatMessage {

@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.nanobot.android.ui.theme.NanoBotTheme
 
@@ -31,7 +31,20 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * 应用根 Composable（简单导航：Chat ↔ Settings）
+ */
 @Composable
 fun NanoBotApp() {
-    ChatScreen()
+    var showSettings by remember { mutableStateOf(false) }
+
+    if (showSettings) {
+        SettingsScreen(
+            onBack = { showSettings = false }
+        )
+    } else {
+        ChatScreen(
+            onOpenSettings = { showSettings = true }
+        )
+    }
 }

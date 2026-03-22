@@ -101,6 +101,9 @@ dependencies {
     // DataStore
     implementation(libs.datastore.preferences)
 
+    // Security - EncryptedSharedPreferences for API Key storage
+    implementation(libs.security.crypto)
+
     // Markdown
     implementation(libs.markwon.core)
     implementation(libs.markwon.syntax)

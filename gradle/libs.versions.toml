@@ -15,6 +15,7 @@ retrofit = "2.11.0"
 moshi = "1.15.1"
 room = "2.6.1"
 datastore = "1.1.1"
+securityCrypto = "1.1.0-alpha06"
 markwon = "4.6.2"
 coil = "2.7.0"
 kotlinxSerialization = "1.7.3"
@@ -53,6 +54,8 @@ room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 # DataStore
 datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+# Security - EncryptedSharedPreferences
+security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 # Markdown rendering
 markwon-core = { group = "io.noties.markwon", name = "core", version.ref = "markwon" }
 markwon-syntax = { group = "io.noties.markwon", name = "syntax-highlight", version.ref = "markwon" }

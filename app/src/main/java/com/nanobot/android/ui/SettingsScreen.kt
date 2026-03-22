@@ -1,11 +1,10 @@
 package com.nanobot.android.ui
 
-import android.content.Context
-import android.content.Intent
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -13,198 +12,491 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nanobot.android.data.AppSettings
 
 /**
  * 设置界面
+ *
+ * 安全说明：
+ * - API Key 在界面上默认以掩码显示（PasswordVisualTransformation）
+ * - 所有 Key 通过 SettingsRepository 保存到 EncryptedSharedPreferences
+ * - 保存后立即热重载 Provider，无需重启 App
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = viewModel()
 ) {
-    val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("nanobot_config", Context.MODE_PRIVATE) }
+    val savedSettings by viewModel.settings.collectAsStateWithLifecycle()
 
-    var openrouterKey by remember { mutableStateOf(prefs.getString("openrouter_api_key", "") ?: "") }
-    var anthropicKey by remember { mutableStateOf(prefs.getString("anthropic_api_key", "") ?: "") }
-    var deepseekKey by remember { mutableStateOf(prefs.getString("deepseek_api_key", "") ?: "") }
-    var openaiKey by remember { mutableStateOf(prefs.getString("openai_api_key", "") ?: "") }
-    var ollamaUrl by remember { mutableStateOf(prefs.getString("ollama_base_url", "http://192.168.1.x:11434") ?: "") }
-    var defaultModel by remember { mutableStateOf(prefs.getString("default_model", "openrouter/anthropic/claude-3.5-sonnet") ?: "") }
+    // 编辑中的临时状态（用户改完再保存，避免实时写入影响正在进行的对话）
+    var defaultModel by remember(savedSettings.defaultModel) {
+        mutableStateOf(savedSettings.defaultModel)
+    }
+    var openrouterKey by remember(savedSettings.openrouterApiKey) {
+        mutableStateOf(savedSettings.openrouterApiKey)
+    }
+    var anthropicKey by remember(savedSettings.anthropicApiKey) {
+        mutableStateOf(savedSettings.anthropicApiKey)
+    }
+    var deepseekKey by remember(savedSettings.deepseekApiKey) {
+        mutableStateOf(savedSettings.deepseekApiKey)
+    }
+    var openaiKey by remember(savedSettings.openaiApiKey) {
+        mutableStateOf(savedSettings.openaiApiKey)
+    }
+    var ollamaUrl by remember(savedSettings.ollamaBaseUrl) {
+        mutableStateOf(savedSettings.ollamaBaseUrl)
+    }
+    var customApiKey by remember(savedSettings.customApiKey) {
+        mutableStateOf(savedSettings.customApiKey)
+    }
+    var customBaseUrl by remember(savedSettings.customBaseUrl) {
+        mutableStateOf(savedSettings.customBaseUrl)
+    }
+    var customProviderName by remember(savedSettings.customProviderName) {
+        mutableStateOf(savedSettings.customProviderName)
+    }
+    var customDefaultModel by remember(savedSettings.customDefaultModel) {
+        mutableStateOf(savedSettings.customDefaultModel)
+    }
 
-    var showRestartDialog by remember { mutableStateOf(false) }
+    var saveSuccess by remember { mutableStateOf(false) }
+
+    fun doSave() {
+        viewModel.save(
+            AppSettings(
+                defaultModel = defaultModel,
+                openrouterApiKey = openrouterKey,
+                anthropicApiKey = anthropicKey,
+                deepseekApiKey = deepseekKey,
+                openaiApiKey = openaiKey,
+                ollamaBaseUrl = ollamaUrl,
+                customApiKey = customApiKey,
+                customBaseUrl = customBaseUrl,
+                customProviderName = customProviderName,
+                customDefaultModel = customDefaultModel
+            )
+        )
+        saveSuccess = true
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("设置") },
+                title = { Text("模型配置") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, "返回")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
-                    TextButton(onClick = {
-                        // 保存配置
-                        prefs.edit()
-                            .putString("openrouter_api_key", openrouterKey)
-                            .putString("anthropic_api_key", anthropicKey)
-                            .putString("deepseek_api_key", deepseekKey)
-                            .putString("openai_api_key", openaiKey)
-                            .putString("ollama_base_url", ollamaUrl)
-                            .putString("default_model", defaultModel)
-                            .apply()
-                        showRestartDialog = true
-                    }) {
+                    TextButton(
+                        onClick = { doSave() }
+                    ) {
+                        Icon(
+                            Icons.Default.Save,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
                         Text("保存")
                     }
                 }
             )
         }
     ) { padding ->
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                SettingsSection("默认模型") {
-                    OutlinedTextField(
-                        value = defaultModel,
-                        onValueChange = { defaultModel = it },
-                        label = { Text("模型名称") },
-                        placeholder = { Text("openrouter/anthropic/claude-3.5-sonnet") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Text(
-                        text = "格式: provider/model（如 openrouter/anthropic/claude-3.5-sonnet）",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                }
-            }
 
-            item {
-                SettingsSection("OpenRouter（推荐，支持 100+ 模型）") {
-                    ApiKeyField(
-                        value = openrouterKey,
-                        onValueChange = { openrouterKey = it },
-                        label = "API Key",
-                        placeholder = "sk-or-..."
-                    )
-                    OutlinedButton(
-                        onClick = { /* 打开 openrouter.ai */ },
-                        modifier = Modifier.fillMaxWidth()
+            // ── 保存成功提示 ──────────────────────────────────────────────────
+            if (saveSuccess) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
                     ) {
-                        Text("获取 OpenRouter API Key →")
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                "配置已保存，Provider 已重新加载（无需重启）",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
                 }
             }
 
+            // ── 安全说明 ──────────────────────────────────────────────────────
             item {
-                SettingsSection("Anthropic（Claude 直连）") {
-                    ApiKeyField(
-                        value = anthropicKey,
-                        onValueChange = { anthropicKey = it },
-                        label = "API Key",
-                        placeholder = "sk-ant-..."
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp).padding(top = 2.dp)
+                        )
+                        Text(
+                            "API Key 使用 Android KeyStore 加密存储，其他 App 无法读取。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
+            // ── 默认模型 ──────────────────────────────────────────────────────
             item {
-                SettingsSection("DeepSeek") {
-                    ApiKeyField(
-                        value = deepseekKey,
-                        onValueChange = { deepseekKey = it },
-                        label = "API Key",
-                        placeholder = "sk-..."
-                    )
-                }
-            }
-
-            item {
-                SettingsSection("OpenAI") {
-                    ApiKeyField(
-                        value = openaiKey,
-                        onValueChange = { openaiKey = it },
-                        label = "API Key",
-                        placeholder = "sk-..."
-                    )
-                }
-            }
-
-            item {
-                SettingsSection("Ollama（本地/NAS 上的模型）") {
+                SettingsSection(
+                    title = "默认模型",
+                    icon = Icons.Default.SmartToy
+                ) {
                     OutlinedTextField(
-                        value = ollamaUrl,
-                        onValueChange = { ollamaUrl = it },
-                        label = { Text("Ollama 服务地址") },
-                        placeholder = { Text("http://192.168.1.x:11434") },
+                        value = defaultModel,
+                        onValueChange = { defaultModel = it; saveSuccess = false },
+                        label = { Text("模型标识") },
+                        placeholder = { Text("openrouter/anthropic/claude-3.5-sonnet") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        leadingIcon = {
+                            Icon(Icons.Default.ModelTraining, contentDescription = null)
+                        }
                     )
                     Text(
-                        text = "支持局域网 NAS 上的 Ollama 服务，无需 API Key",
+                        "格式：provider/model，如 openrouter/anthropic/claude-3.5-sonnet、anthropic/claude-3-5-sonnet-20241022、deepseek-chat、ollama/qwen2.5",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
             }
-        }
-    }
 
-    if (showRestartDialog) {
-        AlertDialog(
-            onDismissRequest = { showRestartDialog = false },
-            title = { Text("配置已保存") },
-            text = { Text("新的配置将在重启应用后生效。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showRestartDialog = false
-                    onBack()
-                }) {
-                    Text("确定")
+            // ── OpenRouter ────────────────────────────────────────────────────
+            item {
+                ProviderSection(
+                    title = "OpenRouter",
+                    subtitle = "推荐 · 支持 Claude / GPT / Gemini / DeepSeek 等 100+ 模型",
+                    isConfigured = openrouterKey.isNotEmpty()
+                ) {
+                    ApiKeyField(
+                        value = openrouterKey,
+                        onValueChange = { openrouterKey = it; saveSuccess = false },
+                        label = "API Key",
+                        placeholder = "sk-or-v1-..."
+                    )
+                    Text(
+                        "常用模型：anthropic/claude-3.5-sonnet · openai/gpt-4o · google/gemini-2.0-flash",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
                 }
             }
-        )
+
+            // ── Anthropic 直连 ────────────────────────────────────────────────
+            item {
+                ProviderSection(
+                    title = "Anthropic（Claude 直连）",
+                    subtitle = "直接调用 Claude API，支持 prompt caching",
+                    isConfigured = anthropicKey.isNotEmpty()
+                ) {
+                    ApiKeyField(
+                        value = anthropicKey,
+                        onValueChange = { anthropicKey = it; saveSuccess = false },
+                        label = "API Key",
+                        placeholder = "sk-ant-api03-..."
+                    )
+                    Text(
+                        "常用模型：claude-3-5-sonnet-20241022 · claude-3-5-haiku-20241022",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            // ── DeepSeek ──────────────────────────────────────────────────────
+            item {
+                ProviderSection(
+                    title = "DeepSeek",
+                    subtitle = "支持 deepseek-chat（V3）和 deepseek-reasoner（R1）",
+                    isConfigured = deepseekKey.isNotEmpty()
+                ) {
+                    ApiKeyField(
+                        value = deepseekKey,
+                        onValueChange = { deepseekKey = it; saveSuccess = false },
+                        label = "API Key",
+                        placeholder = "sk-..."
+                    )
+                    Text(
+                        "常用模型：deepseek-chat · deepseek-reasoner",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            // ── OpenAI ────────────────────────────────────────────────────────
+            item {
+                ProviderSection(
+                    title = "OpenAI",
+                    subtitle = "GPT-4o / o1 / o3-mini 等",
+                    isConfigured = openaiKey.isNotEmpty()
+                ) {
+                    ApiKeyField(
+                        value = openaiKey,
+                        onValueChange = { openaiKey = it; saveSuccess = false },
+                        label = "API Key",
+                        placeholder = "sk-proj-..."
+                    )
+                    Text(
+                        "常用模型：gpt-4o · gpt-4o-mini · o1 · o3-mini",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            // ── Ollama / 本地模型 ─────────────────────────────────────────────
+            item {
+                ProviderSection(
+                    title = "Ollama（本地 / NAS）",
+                    subtitle = "运行在局域网 NAS 或本地的 Ollama 服务，无需 API Key",
+                    isConfigured = ollamaUrl.isNotEmpty() && !ollamaUrl.contains("192.168.1.x")
+                ) {
+                    OutlinedTextField(
+                        value = ollamaUrl,
+                        onValueChange = { ollamaUrl = it; saveSuccess = false },
+                        label = { Text("Ollama 服务地址") },
+                        placeholder = { Text("http://192.168.1.100:11434") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        leadingIcon = {
+                            Icon(Icons.Default.Dns, contentDescription = null)
+                        }
+                    )
+                    Text(
+                        "模型前缀 ollama/，如：ollama/qwen2.5 · ollama/llama3.2 · ollama/deepseek-r1",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            // ── 自定义 OpenAI 兼容接口 ────────────────────────────────────────
+            item {
+                ProviderSection(
+                    title = "自定义接口（OpenAI 兼容）",
+                    subtitle = "任意兼容 OpenAI Chat Completions API 的服务",
+                    isConfigured = customApiKey.isNotEmpty() && customBaseUrl.isNotEmpty()
+                ) {
+                    OutlinedTextField(
+                        value = customBaseUrl,
+                        onValueChange = { customBaseUrl = it; saveSuccess = false },
+                        label = { Text("API Base URL") },
+                        placeholder = { Text("https://your-api.example.com/v1") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        leadingIcon = {
+                            Icon(Icons.Default.Language, contentDescription = null)
+                        }
+                    )
+                    ApiKeyField(
+                        value = customApiKey,
+                        onValueChange = { customApiKey = it; saveSuccess = false },
+                        label = "API Key",
+                        placeholder = "your-api-key"
+                    )
+                    OutlinedTextField(
+                        value = customProviderName,
+                        onValueChange = { customProviderName = it; saveSuccess = false },
+                        label = { Text("Provider 标识（用于模型名前缀）") },
+                        placeholder = { Text("custom") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = customDefaultModel,
+                        onValueChange = { customDefaultModel = it; saveSuccess = false },
+                        label = { Text("默认模型名") },
+                        placeholder = { Text("gpt-3.5-turbo") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Text(
+                        "使用时：在「默认模型」填入 {Provider标识}/{模型名}，如 custom/gpt-3.5-turbo",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            // ── 底部保存按钮 ──────────────────────────────────────────────────
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { doSave() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("保存配置")
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
     }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// 子组件
+// ────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun SettingsSection(
     title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Settings,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             content()
         }
     }
 }
 
+/**
+ * Provider 配置分组卡片，支持展开/折叠
+ */
+@Composable
+fun ProviderSection(
+    title: String,
+    subtitle: String,
+    isConfigured: Boolean,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    var expanded by remember { mutableStateOf(isConfigured) }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // 标题行（点击展开/折叠）
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (isConfigured) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = "已配置",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(
+                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "收起" else "展开"
+                    )
+                }
+            }
+
+            // 可展开内容
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier.padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    content = content
+                )
+            }
+        }
+    }
+}
+
+/**
+ * API Key 输入框：默认掩码，点击眼睛图标切换明文显示
+ */
 @Composable
 fun ApiKeyField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    placeholder: String
+    placeholder: String,
+    modifier: Modifier = Modifier
 ) {
     var showKey by remember { mutableStateOf(false) }
 
@@ -213,15 +505,18 @@ fun ApiKeyField(
         onValueChange = onValueChange,
         label = { Text(label) },
         placeholder = { Text(placeholder) },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         singleLine = true,
         visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        leadingIcon = {
+            Icon(Icons.Default.Key, contentDescription = null)
+        },
         trailingIcon = {
             IconButton(onClick = { showKey = !showKey }) {
                 Icon(
                     imageVector = if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                    contentDescription = if (showKey) "隐藏" else "显示"
+                    contentDescription = if (showKey) "隐藏 Key" else "显示 Key"
                 )
             }
         }

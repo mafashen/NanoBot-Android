@@ -36,7 +36,8 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    viewModel: ChatViewModel = viewModel()
+    viewModel: ChatViewModel = viewModel(),
+    onOpenSettings: (() -> Unit)? = null
 ) {
     val messages by viewModel.messages.collectAsState()
     val inputText by viewModel.inputText.collectAsState()
@@ -70,6 +71,15 @@ fun ChatScreen(
                             imageVector = Icons.Default.Add,
                             contentDescription = "新建会话"
                         )
+                    }
+                    // 设置按钮
+                    onOpenSettings?.let {
+                        IconButton(onClick = it) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "设置"
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
